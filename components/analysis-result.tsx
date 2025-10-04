@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AlertCircle, CheckCircle, Camera, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Camera,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react";
 import type { FoodAnalysis } from "@/components/food-analyzer";
 
 interface AnalysisResultProps {
@@ -157,6 +163,26 @@ export function AnalysisResult({
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Medical Disclaimer Warning */}
+            <div className="bg-amber-50 dark:bg-amber-950/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                    ⚠️ Important Disclaimer
+                  </p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    These estimates should{" "}
+                    <strong>not be taken at face value</strong>. Always
+                    double-check with your healthcare provider. This tool is for
+                    estimation purposes only and is{" "}
+                    <strong>not medically accurate</strong>. Use at your own
+                    discretion.
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* FDC Data Source Indicator */}
