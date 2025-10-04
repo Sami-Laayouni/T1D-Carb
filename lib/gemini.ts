@@ -96,7 +96,7 @@ export async function analyzeImageWithGemini(
   imageB64: string,
   mimeType: string = "image/jpeg"
 ): Promise<VisionResult> {
-  const prompt = `You are a nutrition expert helping Type 1 Diabetics. Analyze the provided food image and estimate macronutrients for the most likely single food item present. 
+  const prompt = `You are a nutrition expert helping Type 1 Diabetics. Analyze the provided food image and identify what food items you can see. Be thorough and descriptive.
 
 Return STRICT JSON only with: {
   "foodName": string, 
@@ -111,12 +111,27 @@ Return STRICT JSON only with: {
   "clarificationQuestion": string
 }. 
 
-CRITICAL PORTION COUNTING RULES:
+FOOD IDENTIFICATION RULES:
+1. Look carefully at the entire image - food might be partially visible or in different positions
+2. Identify the most prominent food item(s) you can see
+3. If you see multiple items, focus on the main dish or most visible item
+4. Be descriptive: "Pancakes with syrup" instead of just "Pancakes"
+5. If the image is blurry or unclear, describe what you can make out
+6. NEVER return "Unknown food" - always try to identify something, even if uncertain
+
+COUNTING RULES:
 1. COUNT EXACTLY what you see in the image - be accurate and precise
 2. If you see 6 pancakes, say "6 pancakes" - don't underestimate
 3. Count all visible items accurately - don't be conservative if you can clearly see more
 4. Describe the exact size and number of items visible
 5. The servingSize field MUST match the actual count in your notes - if you see 6 pancakes, servingSize should say "6 pancakes"
+6. For nutrition values, provide estimates for the TOTAL count (e.g., if 6 pancakes, estimate total carbs for all 6)
+
+CONFIDENCE RULES:
+- Use confidence 0.8-0.9 for clear, obvious food items
+- Use confidence 0.6-0.7 for somewhat unclear but identifiable items
+- Use confidence 0.4-0.5 for blurry or partially visible items
+- NEVER use confidence below 0.3 unless the image is completely unidentifiable
 
 MANDATORY CLARIFICATION RULES - ALWAYS set needsClarification to true and ask ONE specific question for:
 
@@ -232,68 +247,91 @@ function safeParseVisionJson(text: string): VisionResult {
     const parsed = JSON.parse(jsonText);
     const foodName = String(parsed.foodName || "Unknown food").toLowerCase();
 
+    // If foodName is "unknown food" or empty, try to extract from notes
+    let finalFoodName = parsed.foodName || "Unknown food";
+    if (finalFoodName.toLowerCase() === "unknown food" && parsed.notes) {
+      // Try to extract food name from notes
+      const notesLower = parsed.notes.toLowerCase();
+      if (notesLower.includes("pancake")) finalFoodName = "Pancakes";
+      else if (notesLower.includes("bread")) finalFoodName = "Bread";
+      else if (notesLower.includes("rice")) finalFoodName = "Rice";
+      else if (notesLower.includes("pasta")) finalFoodName = "Pasta";
+      else if (notesLower.includes("chicken")) finalFoodName = "Chicken";
+      else if (notesLower.includes("beef")) finalFoodName = "Beef";
+      else if (notesLower.includes("fish")) finalFoodName = "Fish";
+      else if (notesLower.includes("milk")) finalFoodName = "Milk";
+      else if (notesLower.includes("cheese")) finalFoodName = "Cheese";
+      else if (notesLower.includes("oat")) finalFoodName = "Oatmeal";
+    }
+
     // Force clarification for foods that need it, regardless of AI's decision
     let needsClarification = Boolean(parsed.needsClarification || false);
     let clarificationQuestion = parsed.clarificationQuestion || "";
 
     // Override AI decision for foods that should always ask for clarification
+    const foodNameLower = finalFoodName.toLowerCase();
     if (
-      foodName.includes("pancake") ||
-      foodName.includes("syrup") ||
-      foodName.includes("bread") ||
-      foodName.includes("rice") ||
-      foodName.includes("pasta") ||
-      foodName.includes("chicken") ||
-      foodName.includes("beef") ||
-      foodName.includes("fish") ||
-      foodName.includes("milk") ||
-      foodName.includes("cheese")
+      foodNameLower.includes("pancake") ||
+      foodNameLower.includes("syrup") ||
+      foodNameLower.includes("bread") ||
+      foodNameLower.includes("rice") ||
+      foodNameLower.includes("pasta") ||
+      foodNameLower.includes("chicken") ||
+      foodNameLower.includes("beef") ||
+      foodNameLower.includes("fish") ||
+      foodNameLower.includes("milk") ||
+      foodNameLower.includes("cheese") ||
+      foodNameLower.includes("oatmeal")
     ) {
-      if (foodName.includes("pancake")) {
+      if (foodNameLower.includes("pancake")) {
         needsClarification = true;
-        if (foodName.includes("syrup")) {
+        if (foodNameLower.includes("syrup")) {
           clarificationQuestion =
             "What type of syrup is this? (maple syrup, high fructose corn syrup, or artificial sweetener?)";
         } else {
           clarificationQuestion =
             "How many pancakes do you see in this image? Please confirm the exact count.";
         }
-      } else if (foodName.includes("bread")) {
+      } else if (foodNameLower.includes("bread")) {
         needsClarification = true;
         clarificationQuestion =
           "Is this white bread, whole wheat, or multigrain?";
-      } else if (foodName.includes("rice")) {
+      } else if (foodNameLower.includes("rice")) {
         needsClarification = true;
         clarificationQuestion = "Is this white rice, brown rice, or wild rice?";
-      } else if (foodName.includes("pasta")) {
+      } else if (foodNameLower.includes("pasta")) {
         needsClarification = true;
         clarificationQuestion = "Is this regular pasta or whole wheat pasta?";
-      } else if (foodName.includes("chicken")) {
+      } else if (foodNameLower.includes("chicken")) {
         needsClarification = true;
         clarificationQuestion = "Is this chicken breast, thigh, or wing?";
-      } else if (foodName.includes("beef")) {
+      } else if (foodNameLower.includes("beef")) {
         needsClarification = true;
         clarificationQuestion =
           "Is this lean ground beef or regular ground beef?";
-      } else if (foodName.includes("fish")) {
+      } else if (foodNameLower.includes("fish")) {
         needsClarification = true;
         clarificationQuestion = "Is this salmon, cod, or another type of fish?";
-      } else if (foodName.includes("milk")) {
+      } else if (foodNameLower.includes("milk")) {
         needsClarification = true;
         clarificationQuestion = "Is this whole milk, 2%, 1%, or skim milk?";
-      } else if (foodName.includes("cheese")) {
+      } else if (foodNameLower.includes("cheese")) {
         needsClarification = true;
         clarificationQuestion = "Is this regular cheese or low-fat cheese?";
+      } else if (foodNameLower.includes("oatmeal")) {
+        needsClarification = true;
+        clarificationQuestion =
+          "Is this plain oatmeal or flavored? What size portion do you see?";
       }
     }
 
     return {
-      foodName: String(parsed.foodName || "Unknown food"),
+      foodName: finalFoodName,
       carbs: Number(parsed.carbs || 0),
       protein: Number(parsed.protein || 0),
       fat: Number(parsed.fat || 0),
       calories: Number(parsed.calories || 0),
-      confidence: Math.max(0, Math.min(1, Number(parsed.confidence || 0.3))),
+      confidence: Math.max(0.4, Math.min(1, Number(parsed.confidence || 0.5))), // Minimum 0.4 confidence
       servingSize: String(parsed.servingSize || "1 serving"),
       notes: typeof parsed.notes === "string" ? parsed.notes : undefined,
       needsClarification,
@@ -307,7 +345,7 @@ function safeParseVisionJson(text: string): VisionResult {
       protein: 0,
       fat: 0,
       calories: 0,
-      confidence: 0.3,
+      confidence: 0.4, // Higher minimum confidence
       servingSize: "1 serving",
       needsClarification: true,
       clarificationQuestion:
