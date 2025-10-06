@@ -81,84 +81,78 @@ export async function POST(request: NextRequest) {
       console.log("[ClarifyFood] FDC enrichment failed:", e);
     }
 
-    // Calculate final nutrition using FDC data per item × count
-    let finalCarbs = clarified.carbs;
-    let finalProtein = clarified.protein;
-    let finalFat = clarified.fat;
-    let finalCalories = clarified.calories;
+    // Use AI to make smart predictions based on clarified Gemini observations + FDC data
+    console.log(
+      "[ClarifyFood] Using AI to predict final nutritional values..."
+    );
 
-    if (enrichment) {
-      console.log("[ClarifyFood] FDC enrichment data:", enrichment);
+    let aiResult;
+    // Extract a numeric item count from clarified servingSize/notes
+    const servingCountMatch = (clarified.servingSize || "").match(
+      /\b(\d{1,3})\b/
+    );
+    const notesCountMatch = (clarified.notes || "").match(/\b(\d{1,3})\b/);
+    const detectedCount = servingCountMatch
+      ? parseInt(servingCountMatch[1], 10)
+      : notesCountMatch
+      ? parseInt(notesCountMatch[1], 10)
+      : null;
+    try {
+      const aiResponse = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+        }/api/ai-predict-carbs`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            geminiObservations: {
+              foodName: clarified.foodName,
+              servingSize: clarified.servingSize,
+              notes: clarified.notes,
+              confidence: clarified.confidence,
+            },
+            fdcData: enrichment ? [enrichment] : [],
+            clarificationResponse: userResponse,
+          }),
+        }
+      );
 
-      // Extract count from serving size (e.g., "6 pancakes" -> 6)
-      const countMatch = clarified.servingSize?.match(/(\d+)/);
-      const itemCount = countMatch ? parseInt(countMatch[1]) : 1;
-
-      console.log("[ClarifyFood] Detected item count:", itemCount);
-
-      // Use FDC per-serving data if available, otherwise use per-100g data with estimated serving size
-      if (enrichment.carbsPerServing) {
-        finalCarbs = enrichment.carbsPerServing * itemCount;
-        console.log(
-          `[ClarifyFood] FDC carbs per serving: ${enrichment.carbsPerServing} × ${itemCount} = ${finalCarbs}`
-        );
-      } else if (enrichment.carbsPer100g) {
-        // Estimate realistic serving size based on food type
-        const estimatedServingGrams = getRealisticServingSize(
-          clarified.foodName,
-          itemCount
-        );
-        finalCarbs =
-          ((enrichment.carbsPer100g * estimatedServingGrams) / 100) * itemCount;
-        console.log(
-          `[ClarifyFood] FDC carbs per 100g: ${enrichment.carbsPer100g} × ${estimatedServingGrams}g per item × ${itemCount} items = ${finalCarbs}`
-        );
+      if (!aiResponse.ok) {
+        throw new Error("AI prediction failed");
       }
 
-      if (enrichment.proteinPerServing) {
-        finalProtein = enrichment.proteinPerServing * itemCount;
-      } else if (enrichment.proteinPer100g) {
-        const estimatedServingGrams = getRealisticServingSize(
-          clarified.foodName,
-          itemCount
-        );
-        finalProtein =
-          ((enrichment.proteinPer100g * estimatedServingGrams) / 100) *
-          itemCount;
+      const aiResponseData = await aiResponse.json();
+      aiResult = aiResponseData.result;
+      if (detectedCount && typeof aiResult?.itemCount === "number") {
+        aiResult.itemCount = detectedCount;
       }
-
-      if (enrichment.fatPerServing) {
-        finalFat = enrichment.fatPerServing * itemCount;
-      } else if (enrichment.fatPer100g) {
-        const estimatedServingGrams = getRealisticServingSize(
-          clarified.foodName,
-          itemCount
-        );
-        finalFat =
-          ((enrichment.fatPer100g * estimatedServingGrams) / 100) * itemCount;
-      }
-
-      if (enrichment.caloriesPerServing) {
-        finalCalories = enrichment.caloriesPerServing * itemCount;
-      } else if (enrichment.caloriesPer100g) {
-        const estimatedServingGrams = getRealisticServingSize(
-          clarified.foodName,
-          itemCount
-        );
-        finalCalories =
-          ((enrichment.caloriesPer100g * estimatedServingGrams) / 100) *
-          itemCount;
-      }
-
-      console.log("[ClarifyFood] Final calculated values:", {
-        carbs: finalCarbs,
-        protein: finalProtein,
-        fat: finalFat,
-        calories: finalCalories,
-        itemCount,
+      console.log("[ClarifyFood] AI prediction result:", aiResult);
+    } catch (aiError) {
+      console.error(
+        "[ClarifyFood] AI prediction failed, falling back to Gemini estimates:",
+        aiError
+      );
+      // Fallback to Gemini's estimates if AI fails
+      aiResult = {
+        carbs: clarified.carbs,
+        protein: clarified.protein,
+        fat: clarified.fat,
+        calories: clarified.calories,
+        itemCount: detectedCount || 1,
         servingSize: clarified.servingSize,
-      });
+        breakdown: "Fallback to Gemini estimates",
+        confidence: clarified.confidence,
+      };
     }
+
+    const finalCarbs = aiResult.carbs;
+    const finalProtein = aiResult.protein;
+    const finalFat = aiResult.fat;
+    const finalCalories = aiResult.calories;
+    const itemCount = aiResult.itemCount;
 
     return NextResponse.json({
       foodName: clarified.foodName,
@@ -166,8 +160,10 @@ export async function POST(request: NextRequest) {
       protein: Math.round(finalProtein || 0),
       fat: Math.round(finalFat || 0),
       calories: Math.round(finalCalories || 0),
-      confidence: clarified.confidence,
-      servingSize: clarified.servingSize || "1 serving",
+      confidence: aiResult.confidence,
+      servingSize: aiResult.servingSize || clarified.servingSize || "1 serving",
+      breakdown: aiResult.breakdown,
+      itemCount: itemCount,
       enrichment,
     });
   } catch (error) {

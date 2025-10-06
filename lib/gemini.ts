@@ -31,14 +31,14 @@ export interface VisionResult {
   clarificationQuestion?: string;
 }
 
-function getClient(): GoogleGenerativeAI {
+export function getClient(): GoogleGenerativeAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
   return new GoogleGenerativeAI(apiKey);
 }
 
-const VISION_MODEL = "gemini-2.0-flash";
-const TEXT_MODEL = "gemini-2.0-flash";
+const VISION_MODEL = "gemini-2.0-flash-exp";
+const TEXT_MODEL = "gemini-2.0-flash-exp";
 
 export async function clarifyWithGeminiOrVertex(
   params: ClarifyParams
@@ -96,7 +96,7 @@ export async function analyzeImageWithGemini(
   imageB64: string,
   mimeType: string = "image/jpeg"
 ): Promise<VisionResult> {
-  const prompt = `You are a nutrition expert helping Type 1 Diabetics. Analyze the provided food image and identify what food items you can see. Be thorough and descriptive.
+  const prompt = `You are a nutrition expert helping Type 1 Diabetics. Analyze the provided food image and identify ALL food items you can see. Be extremely thorough and descriptive.
 
 Return STRICT JSON only with: {
   "foodName": string, 
@@ -111,21 +111,31 @@ Return STRICT JSON only with: {
   "clarificationQuestion": string
 }. 
 
-FOOD IDENTIFICATION RULES:
-1. Look carefully at the entire image - food might be partially visible or in different positions
-2. Identify the most prominent food item(s) you can see
-3. If you see multiple items, focus on the main dish or most visible item
-4. Be descriptive: "Pancakes with syrup" instead of just "Pancakes"
-5. If the image is blurry or unclear, describe what you can make out
-6. NEVER return "Unknown food" - always try to identify something, even if uncertain
+COMPREHENSIVE FOOD IDENTIFICATION RULES:
+1. Look at the ENTIRE image - scan all areas for food items
+2. Identify EVERY food item: main dishes, sides, drinks, condiments, garnishes
+3. For complex meals, break down into individual components
+4. Include beverages, sauces, dressings, bread, butter, etc.
+5. Be descriptive: "6 pancakes with maple syrup and butter" not just "pancakes"
+6. If multiple plates/containers, analyze each area separately
+7. NEVER return "Unknown food" - always try to identify something, even if uncertain
 
-COUNTING RULES:
-1. COUNT EXACTLY what you see in the image - be accurate and precise
+DETAILED COUNTING RULES:
+1. COUNT EXACTLY what you see - be accurate and precise
 2. If you see 6 pancakes, say "6 pancakes" - don't underestimate
-3. Count all visible items accurately - don't be conservative if you can clearly see more
-4. Describe the exact size and number of items visible
-5. The servingSize field MUST match the actual count in your notes - if you see 6 pancakes, servingSize should say "6 pancakes"
-6. For nutrition values, provide estimates for the TOTAL count (e.g., if 6 pancakes, estimate total carbs for all 6)
+3. Count ALL visible items: main dish, sides, drinks, condiments
+4. Describe exact sizes and quantities for each component
+5. The servingSize field should describe the main item
+6. The notes field should list ALL items with their quantities
+7. For nutrition values, provide rough estimates for the main item only
+
+COMPLEX MEAL ANALYSIS:
+- Main dish: Describe the primary food item with size/quantity
+- Side items: List all sides with estimated amounts
+- Beverages: Note any drinks with estimated volumes
+- Condiments: Include sauces, dressings, butter, etc.
+- Cooking methods: Note if items are fried, grilled, baked, etc.
+- Overall context: Breakfast, lunch, dinner, snack, etc.
 
 CONFIDENCE RULES:
 - Use confidence 0.8-0.9 for clear, obvious food items
@@ -240,18 +250,31 @@ function safeParseClarifyJson(text: string): ClarifyResult {
 
 function safeParseVisionJson(text: string): VisionResult {
   try {
-    // Clean the text to extract JSON
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // Clean the text to extract JSON - handle both objects and arrays
+    const jsonMatch = text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
     const jsonText = jsonMatch ? jsonMatch[0] : text;
 
     const parsed = JSON.parse(jsonText);
-    const foodName = String(parsed.foodName || "Unknown food").toLowerCase();
+
+    // Handle array response - take the first item (main food)
+    let foodData;
+    if (Array.isArray(parsed)) {
+      // Find the main food item (highest confidence or first item)
+      foodData =
+        parsed.find(
+          (item) =>
+            item.foodName && !item.foodName.toLowerCase().includes("butter")
+        ) || parsed[0];
+    } else {
+      foodData = parsed;
+    }
+    const foodName = String(foodData.foodName || "Unknown food").toLowerCase();
 
     // If foodName is "unknown food" or empty, try to extract from notes
-    let finalFoodName = parsed.foodName || "Unknown food";
-    if (finalFoodName.toLowerCase() === "unknown food" && parsed.notes) {
+    let finalFoodName = foodData.foodName || "Unknown food";
+    if (finalFoodName.toLowerCase() === "unknown food" && foodData.notes) {
       // Try to extract food name from notes
-      const notesLower = parsed.notes.toLowerCase();
+      const notesLower = foodData.notes.toLowerCase();
       if (notesLower.includes("pancake")) finalFoodName = "Pancakes";
       else if (notesLower.includes("bread")) finalFoodName = "Bread";
       else if (notesLower.includes("rice")) finalFoodName = "Rice";
@@ -265,8 +288,8 @@ function safeParseVisionJson(text: string): VisionResult {
     }
 
     // Force clarification for foods that need it, regardless of AI's decision
-    let needsClarification = Boolean(parsed.needsClarification || false);
-    let clarificationQuestion = parsed.clarificationQuestion || "";
+    let needsClarification = Boolean(foodData.needsClarification || false);
+    let clarificationQuestion = foodData.clarificationQuestion || "";
 
     // Override AI decision for foods that should always ask for clarification
     const foodNameLower = finalFoodName.toLowerCase();
@@ -327,13 +350,16 @@ function safeParseVisionJson(text: string): VisionResult {
 
     return {
       foodName: finalFoodName,
-      carbs: Number(parsed.carbs || 0),
-      protein: Number(parsed.protein || 0),
-      fat: Number(parsed.fat || 0),
-      calories: Number(parsed.calories || 0),
-      confidence: Math.max(0.4, Math.min(1, Number(parsed.confidence || 0.5))), // Minimum 0.4 confidence
-      servingSize: String(parsed.servingSize || "1 serving"),
-      notes: typeof parsed.notes === "string" ? parsed.notes : undefined,
+      carbs: Number(foodData.carbs || 0),
+      protein: Number(foodData.protein || 0),
+      fat: Number(foodData.fat || 0),
+      calories: Number(foodData.calories || 0),
+      confidence: Math.max(
+        0.4,
+        Math.min(1, Number(foodData.confidence || 0.5))
+      ), // Minimum 0.4 confidence
+      servingSize: String(foodData.servingSize || "1 serving"),
+      notes: typeof foodData.notes === "string" ? foodData.notes : undefined,
       needsClarification,
       clarificationQuestion,
     };

@@ -9,7 +9,17 @@ import { SettingsDialog } from "@/components/settings-dialog";
 
 interface FoodAnalyzerProps {
   carbRatio: number;
-  onUpdateRatio: (ratio: number) => void;
+  currentBG: string;
+  bgTrend: string;
+  totalDailyDose: string;
+  bgUnit: "mg/dL" | "mmol/L";
+  onUpdateProfile: (data: {
+    ratio: number;
+    currentBG: string;
+    bgTrend: string;
+    totalDailyDose: string;
+    bgUnit: "mg/dL" | "mmol/L";
+  }) => void;
 }
 
 export interface FoodAnalysis {
@@ -27,7 +37,14 @@ export interface FoodAnalysis {
   notes?: string;
 }
 
-export function FoodAnalyzer({ carbRatio, onUpdateRatio }: FoodAnalyzerProps) {
+export function FoodAnalyzer({
+  carbRatio,
+  currentBG,
+  bgTrend,
+  totalDailyDose,
+  bgUnit,
+  onUpdateProfile,
+}: FoodAnalyzerProps) {
   const [analysis, setAnalysis] = useState<FoodAnalysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -94,37 +111,72 @@ export function FoodAnalyzer({ carbRatio, onUpdateRatio }: FoodAnalyzerProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            Your ratio:{" "}
-            <span className="font-semibold text-foreground">
-              {carbRatio}g per unit
-            </span>
-          </p>
+    <div className="space-y-8">
+      {/* Profile Info Header */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-lg border border-gray-200 dark:border-gray-700">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+              <span className="text-2xl">💉</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                Your Profile
+              </h2>
+              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+                <span>
+                  <span className="font-medium">Ratio:</span> {carbRatio}g per
+                  unit
+                </span>
+                <span>
+                  <span className="font-medium">BG:</span> {currentBG} {bgUnit}
+                </span>
+                <span>
+                  <span className="font-medium">TDD:</span> {totalDailyDose}{" "}
+                  units
+                </span>
+                <span>
+                  <span className="font-medium">Trend:</span>{" "}
+                  {bgTrend === "falling"
+                    ? "📉 Falling"
+                    : bgTrend === "rising"
+                    ? "📈 Rising"
+                    : "➡️ Stable"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowSettings(true)}
+            className="px-4 py-2 text-sm font-medium border-2 border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Settings
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowSettings(true)}
-        >
-          <Settings className="h-4 w-4 mr-2" />
-          Settings
-        </Button>
       </div>
 
-      {!analysis ? (
+      {/* Food Analysis - Always show when no analysis */}
+      {!analysis && (
         <FoodUpload
           onImageCapture={handleImageCapture}
           isAnalyzing={isAnalyzing}
         />
-      ) : (
+      )}
+
+      {analysis && (
         <AnalysisResult
           analysis={analysis}
           carbRatio={carbRatio}
+          currentBG={currentBG}
+          bgTrend={bgTrend}
+          totalDailyDose={totalDailyDose}
+          bgUnit={bgUnit}
           onClarificationResponse={handleClarificationResponse}
-          onReset={handleReset}
+          onReset={() => {
+            setAnalysis(null);
+          }}
           isProcessing={isAnalyzing}
         />
       )}
@@ -133,7 +185,11 @@ export function FoodAnalyzer({ carbRatio, onUpdateRatio }: FoodAnalyzerProps) {
         open={showSettings}
         onOpenChange={setShowSettings}
         currentRatio={carbRatio}
-        onUpdateRatio={onUpdateRatio}
+        currentBG={currentBG}
+        bgTrend={bgTrend}
+        totalDailyDose={totalDailyDose}
+        bgUnit={bgUnit}
+        onUpdateProfile={onUpdateProfile}
       />
     </div>
   );

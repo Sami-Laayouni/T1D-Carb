@@ -92,85 +92,78 @@ export async function POST(request: NextRequest) {
         console.log("[AnalyzeFood] FDC enrichment failed:", e);
       }
 
-      // Calculate final nutrition using FDC data per item × count
-      let finalCarbs = gemini.carbs;
-      let finalProtein = gemini.protein;
-      let finalFat = gemini.fat;
-      let finalCalories = gemini.calories;
+      // Use AI to make smart predictions based on Gemini observations + FDC data
+      console.log(
+        "[AnalyzeFood] Using AI to predict final nutritional values..."
+      );
 
-      if (enrichment) {
-        console.log("[AnalyzeFood] FDC enrichment data:", enrichment);
+      let aiResult;
+      // Extract a numeric item count from Gemini servingSize/notes (e.g., "6 pancakes")
+      const servingCountMatch = (gemini.servingSize || "").match(
+        /\b(\d{1,3})\b/
+      );
+      const notesCountMatch = (gemini.notes || "").match(/\b(\d{1,3})\b/);
+      const detectedCount = servingCountMatch
+        ? parseInt(servingCountMatch[1], 10)
+        : notesCountMatch
+        ? parseInt(notesCountMatch[1], 10)
+        : null;
+      try {
+        const aiResponse = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+          }/api/ai-predict-carbs`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              geminiObservations: {
+                foodName: gemini.foodName,
+                servingSize: gemini.servingSize,
+                notes: gemini.notes,
+                confidence: gemini.confidence,
+              },
+              fdcData: enrichment ? [enrichment] : [],
+            }),
+          }
+        );
 
-        // Extract count from serving size (e.g., "6 pancakes" -> 6)
-        const countMatch = gemini.servingSize?.match(/(\d+)/);
-        const itemCount = countMatch ? parseInt(countMatch[1]) : 1;
-
-        console.log("[AnalyzeFood] Detected item count:", itemCount);
-
-        // Use FDC per-serving data if available, otherwise use per-100g data with realistic serving size
-        if (enrichment.carbsPerServing) {
-          finalCarbs = enrichment.carbsPerServing * itemCount;
-          console.log(
-            `[AnalyzeFood] FDC carbs per serving: ${enrichment.carbsPerServing} × ${itemCount} = ${finalCarbs}`
-          );
-        } else if (enrichment.carbsPer100g) {
-          // Estimate realistic serving size based on food type
-          const estimatedServingGrams = getRealisticServingSize(
-            gemini.foodName,
-            itemCount
-          );
-          finalCarbs =
-            ((enrichment.carbsPer100g * estimatedServingGrams) / 100) *
-            itemCount;
-          console.log(
-            `[AnalyzeFood] FDC carbs per 100g: ${enrichment.carbsPer100g} × ${estimatedServingGrams}g per item × ${itemCount} items = ${finalCarbs}`
-          );
+        if (!aiResponse.ok) {
+          throw new Error("AI prediction failed");
         }
 
-        if (enrichment.proteinPerServing) {
-          finalProtein = enrichment.proteinPerServing * itemCount;
-        } else if (enrichment.proteinPer100g) {
-          const estimatedServingGrams = getRealisticServingSize(
-            gemini.foodName,
-            itemCount
-          );
-          finalProtein =
-            ((enrichment.proteinPer100g * estimatedServingGrams) / 100) *
-            itemCount;
+        const aiResponseData = await aiResponse.json();
+        aiResult = aiResponseData.result;
+        // If we detected a count, enforce it in the AI result
+        if (detectedCount && typeof aiResult?.itemCount === "number") {
+          aiResult.itemCount = detectedCount;
         }
-
-        if (enrichment.fatPerServing) {
-          finalFat = enrichment.fatPerServing * itemCount;
-        } else if (enrichment.fatPer100g) {
-          const estimatedServingGrams = getRealisticServingSize(
-            gemini.foodName,
-            itemCount
-          );
-          finalFat =
-            ((enrichment.fatPer100g * estimatedServingGrams) / 100) * itemCount;
-        }
-
-        if (enrichment.caloriesPerServing) {
-          finalCalories = enrichment.caloriesPerServing * itemCount;
-        } else if (enrichment.caloriesPer100g) {
-          const estimatedServingGrams = getRealisticServingSize(
-            gemini.foodName,
-            itemCount
-          );
-          finalCalories =
-            ((enrichment.caloriesPer100g * estimatedServingGrams) / 100) *
-            itemCount;
-        }
-
-        console.log("[AnalyzeFood] Final calculated values:", {
-          carbs: finalCarbs,
-          protein: finalProtein,
-          fat: finalFat,
-          calories: finalCalories,
-          itemCount,
+        console.log("[AnalyzeFood] AI prediction result:", aiResult);
+      } catch (aiError) {
+        console.error(
+          "[AnalyzeFood] AI prediction failed, falling back to Gemini estimates:",
+          aiError
+        );
+        // Fallback to Gemini's estimates if AI fails
+        aiResult = {
+          carbs: gemini.carbs,
+          protein: gemini.protein,
+          fat: gemini.fat,
+          calories: gemini.calories,
+          itemCount: detectedCount || 1,
           servingSize: gemini.servingSize,
-        });
+          breakdown: "Fallback to Gemini estimates",
+          confidence: gemini.confidence,
+        };
       }
+
+      const finalCarbs = aiResult.carbs;
+      const finalProtein = aiResult.protein;
+      const finalFat = aiResult.fat;
+      const finalCalories = aiResult.calories;
+      const itemCount = aiResult.itemCount;
 
       return NextResponse.json({
         foodName: gemini.foodName,
@@ -178,8 +171,8 @@ export async function POST(request: NextRequest) {
         protein: Math.round(finalProtein || 0),
         fat: Math.round(finalFat || 0),
         calories: Math.round(finalCalories || 0),
-        confidence: gemini.confidence ?? 0.4,
-        servingSize: gemini.servingSize || "1 serving",
+        confidence: aiResult.confidence ?? gemini.confidence ?? 0.4,
+        servingSize: aiResult.servingSize || gemini.servingSize || "1 serving",
         needsClarification,
         clarificationQuestion: needsClarification
           ? gemini.clarificationQuestion ||
@@ -187,6 +180,8 @@ export async function POST(request: NextRequest) {
           : null,
         enrichment,
         notes: gemini.notes,
+        breakdown: aiResult.breakdown,
+        itemCount: itemCount,
       });
     } catch (ge) {
       console.error("[AnalyzeFood] Gemini analysis failed", ge);
