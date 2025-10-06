@@ -530,14 +530,6 @@ export function AnalysisResult({
               </div>
             </div>
 
-            {analysis.enrichment && (
-              <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800">
-                <p className="text-sm text-green-700 dark:text-green-300">
-                  ✓ Enhanced with USDA Food Data Central
-                </p>
-              </div>
-            )}
-
             {analysis.notes && (
               <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
@@ -858,7 +850,7 @@ export function AnalysisResult({
                     <div className="grid grid-cols-3 gap-3">
                       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border text-center">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                          Peak (1h)
+                          1h
                         </p>
                         <p
                           className={`text-lg font-bold ${
@@ -874,7 +866,7 @@ export function AnalysisResult({
                       </div>
                       <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border text-center">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                          Lowest (2h)
+                          2h
                         </p>
                         <p
                           className={`text-lg font-bold ${
