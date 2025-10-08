@@ -40,72 +40,69 @@ export function ManualFoodEntry({
   };
 
   return (
-    <Card className="border-purple-500">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900 rounded-full flex items-center justify-center">
-            <PenTool className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-          </div>
-          <div>
-            <CardTitle className="text-lg">Manual Food Entry</CardTitle>
-            <CardDescription>
-              Add food details manually without taking a photo
-            </CardDescription>
-          </div>
+    <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-3xl p-6 shadow-xl border border-white/20 dark:border-gray-700/50">
+      <div className="text-center mb-8">
+        <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
+          <PenTool className="h-10 w-10 text-white" />
         </div>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="foodName" className="text-sm font-medium">
-              Food Name
-            </Label>
-            <Input
-              id="foodName"
-              value={foodName}
-              onChange={(e) => setFoodName(e.target.value)}
-              placeholder="e.g., Apple, 1 medium"
-              required
-              className="text-base py-3"
-            />
-          </div>
+        <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-3">
+          Manual Food Entry
+        </h3>
+        <p className="text-gray-600 dark:text-gray-400 text-lg">
+          Add food details manually without taking a photo
+        </p>
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-sm font-medium">
-              Additional Notes (Optional)
-            </Label>
-            <Textarea
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g., With skin, estimated portion, special preparation..."
-              rows={3}
-              className="text-base resize-none"
-            />
-            <p className="text-xs text-gray-500">
-              Add any relevant details about the food or preparation
-            </p>
-          </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-3">
+          <Label htmlFor="foodName" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Food Name
+          </Label>
+          <Input
+            id="foodName"
+            value={foodName}
+            onChange={(e) => setFoodName(e.target.value)}
+            placeholder="e.g., Apple, 1 medium"
+            required
+            className="h-14 text-lg px-4 rounded-xl border-2 border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800 transition-all duration-200"
+          />
+        </div>
 
-          <Button
-            type="submit"
-            disabled={isProcessing || !foodName.trim()}
-            className="w-full py-3 text-base font-medium bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-          >
-            {isProcessing ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Analyzing food...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Calculator className="h-4 w-4" />
-                Analyze Food
-              </div>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        <div className="space-y-3">
+          <Label htmlFor="notes" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+            Additional Notes (Optional)
+          </Label>
+          <Textarea
+            id="notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g., With skin, estimated portion, special preparation..."
+            rows={4}
+            className="text-lg px-4 py-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800 resize-none transition-all duration-200"
+          />
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Add any relevant details about the food or preparation
+          </p>
+        </div>
+
+        <Button
+          type="submit"
+          disabled={isProcessing || !foodName.trim()}
+          className="w-full h-16 text-lg font-bold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg hover:shadow-xl transition-all duration-200 rounded-xl"
+        >
+          {isProcessing ? (
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
+              <span>Analyzing food...</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Calculator className="h-6 w-6" />
+              <span>Analyze Food</span>
+            </div>
+          )}
+        </Button>
+      </form>
+    </div>
   );
 }
