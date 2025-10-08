@@ -98,7 +98,7 @@ export async function analyzeImageWithGemini(
 ): Promise<VisionResult> {
   const prompt = `You are a nutrition expert helping Type 1 Diabetics. Analyze the provided food image and identify ALL food items you can see. Be extremely thorough and descriptive.
 
-Return STRICT JSON only with: {
+Return STRICT JSON array with ALL detected food items. Each item should have: {
   "foodName": string, 
   "carbs": number, 
   "protein": number, 
@@ -109,16 +109,45 @@ Return STRICT JSON only with: {
   "notes": string,
   "needsClarification": boolean,
   "clarificationQuestion": string
-}. 
+}
+
+Example format:
+[
+  {
+    "foodName": "Pancakes",
+    "carbs": 30,
+    "protein": 4,
+    "fat": 3,
+    "calories": 170,
+    "confidence": 0.9,
+    "servingSize": "6 pancakes",
+    "notes": "Stack of 6 pancakes",
+    "needsClarification": true,
+    "clarificationQuestion": "What type of syrup is this?"
+  },
+  {
+    "foodName": "Butter",
+    "carbs": 0,
+    "protein": 0,
+    "fat": 11,
+    "calories": 100,
+    "confidence": 0.9,
+    "servingSize": "3 pats",
+    "notes": "1 pat on pancakes, 2 pats in dish",
+    "needsClarification": false,
+    "clarificationQuestion": ""
+  }
+] 
 
 COMPREHENSIVE FOOD IDENTIFICATION RULES:
 1. Look at the ENTIRE image - scan all areas for food items
 2. Identify EVERY food item: main dishes, sides, drinks, condiments, garnishes
 3. For complex meals, break down into individual components
 4. Include beverages, sauces, dressings, bread, butter, etc.
-5. Be descriptive: "6 pancakes with maple syrup and butter" not just "pancakes"
+5. ALWAYS separate different food types into different array items
 6. If multiple plates/containers, analyze each area separately
 7. NEVER return "Unknown food" - always try to identify something, even if uncertain
+8. NEVER combine different foods into one item (e.g., "Pancakes with Syrup" should be separate items)
 
 DETAILED COUNTING RULES:
 1. COUNT EXACTLY what you see - be accurate and precise

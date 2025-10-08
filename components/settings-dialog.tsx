@@ -27,12 +27,14 @@ interface SettingsDialogProps {
   bgTrend: string;
   totalDailyDose: string;
   bgUnit?: "mg/dL" | "mmol/L";
+  correctionFactor?: number;
   onUpdateProfile: (data: {
     ratio: number;
     currentBG: string;
     bgTrend: string;
     totalDailyDose: string;
     bgUnit: "mg/dL" | "mmol/L";
+    correctionFactor: number;
   }) => void;
 }
 
@@ -44,6 +46,7 @@ export function SettingsDialog({
   bgTrend,
   totalDailyDose,
   bgUnit = "mg/dL",
+  correctionFactor = 2,
   onUpdateProfile,
 }: SettingsDialogProps) {
   const [ratio, setRatio] = useState(currentRatio.toString());
@@ -51,16 +54,19 @@ export function SettingsDialog({
   const [trend, setTrend] = useState(bgTrend);
   const [tdd, setTdd] = useState(totalDailyDose);
   const [unit, setUnit] = useState<"mg/dL" | "mmol/L">(bgUnit);
+  const [correction, setCorrection] = useState(correctionFactor.toString());
 
   const handleSave = () => {
     const ratioValue = Number.parseFloat(ratio);
-    if (ratioValue > 0 && bg.trim() && trend && tdd.trim()) {
+    const correctionValue = Number.parseFloat(correction);
+    if (ratioValue > 0 && bg.trim() && trend && tdd.trim() && correctionValue > 0) {
       onUpdateProfile({
         ratio: ratioValue,
         currentBG: bg.trim(),
         bgTrend: trend,
         totalDailyDose: tdd.trim(),
         bgUnit: unit,
+        correctionFactor: correctionValue,
       });
       onOpenChange(false);
     }
@@ -209,6 +215,35 @@ export function SettingsDialog({
                   Your total daily insulin dose (used for ICR/ISF calculations)
                 </p>
               </div>
+
+              {/* Correction Factor */}
+              <div className="space-y-4">
+                <Label
+                  htmlFor="settings-correction"
+                  className="text-base font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Insulin Correction Factor
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="settings-correction"
+                    type="number"
+                    step="0.1"
+                    min="0.5"
+                    max="10"
+                    value={correction}
+                    onChange={(e) => setCorrection(e.target.value)}
+                    className="text-lg py-4 px-4 border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 rounded-lg w-full"
+                    placeholder="2"
+                  />
+                  <span className="absolute right-4 top-1/2 transform -translate-y-1/2 text-sm text-gray-500 font-medium">
+                    mmol/L per unit
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  How much 1 unit of insulin lowers your BG (mmol/L)
+                </p>
+              </div>
             </div>
 
             {/* BG Trend Section */}
@@ -276,13 +311,13 @@ export function SettingsDialog({
             <Button
               onClick={handleSave}
               className="flex-1 py-4 text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
-              disabled={!ratio || !bg.trim() || !trend || !tdd.trim()}
+              disabled={!ratio || !bg.trim() || !trend || !tdd.trim() || !correction.trim()}
             >
               💾 Save Changes
             </Button>
           </div>
 
-          {(!ratio || !bg.trim() || !trend || !tdd.trim()) && (
+          {(!ratio || !bg.trim() || !trend || !tdd.trim() || !correction.trim()) && (
             <div className="text-center p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
               <p className="text-sm text-amber-700 dark:text-amber-300 font-medium">
                 ⚠️ Please fill in all fields to save your settings

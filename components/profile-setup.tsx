@@ -28,6 +28,7 @@ interface ProfileSetupProps {
     bgTrend: string;
     totalDailyDose: string;
     bgUnit: "mg/dL" | "mmol/L";
+    correctionFactor: number;
   }) => void;
 }
 
@@ -37,15 +38,18 @@ export function ProfileSetup({ onSave }: ProfileSetupProps) {
   const [bgTrend, setBgTrend] = useState("");
   const [totalDailyDose, setTotalDailyDose] = useState("40");
   const [bgUnit, setBgUnit] = useState<"mg/dL" | "mmol/L">("mg/dL");
+  const [correctionFactor, setCorrectionFactor] = useState("2");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const ratioValue = Number.parseFloat(ratio);
+    const correctionFactorValue = Number.parseFloat(correctionFactor);
     if (
       ratioValue > 0 &&
       currentBG.trim() &&
       bgTrend &&
-      totalDailyDose.trim()
+      totalDailyDose.trim() &&
+      correctionFactorValue > 0
     ) {
       onSave({
         ratio: ratioValue,
@@ -53,6 +57,7 @@ export function ProfileSetup({ onSave }: ProfileSetupProps) {
         bgTrend,
         totalDailyDose: totalDailyDose.trim(),
         bgUnit,
+        correctionFactor: correctionFactorValue,
       });
     }
   };
@@ -195,6 +200,36 @@ export function ProfileSetup({ onSave }: ProfileSetupProps) {
                 </div>
               </div>
 
+              {/* Correction Factor */}
+              <div className="space-y-3">
+                <Label
+                  htmlFor="correctionFactor"
+                  className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Insulin Correction Factor
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="correctionFactor"
+                    type="number"
+                    step="0.1"
+                    min="0.5"
+                    max="10"
+                    placeholder="2"
+                    value={correctionFactor}
+                    onChange={(e) => setCorrectionFactor(e.target.value)}
+                    required
+                    className="text-lg py-3 px-4 border-2 border-gray-300 focus:border-green-500 focus:ring-2 focus:ring-green-200 rounded-lg w-full"
+                  />
+                  <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                    mmol/L per unit
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  How much 1 unit of insulin lowers your BG (mmol/L)
+                </p>
+              </div>
+
               {/* BG Trend */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -251,7 +286,8 @@ export function ProfileSetup({ onSave }: ProfileSetupProps) {
                 !ratio ||
                 !currentBG.trim() ||
                 !bgTrend ||
-                !totalDailyDose.trim()
+                !totalDailyDose.trim() ||
+                !correctionFactor.trim()
               }
             >
               🚀 Start Tracking
@@ -260,7 +296,8 @@ export function ProfileSetup({ onSave }: ProfileSetupProps) {
             {(!ratio ||
               !currentBG.trim() ||
               !bgTrend ||
-              !totalDailyDose.trim()) && (
+              !totalDailyDose.trim() ||
+              !correctionFactor.trim()) && (
               <p className="text-sm text-blue-600 dark:text-blue-400 mt-3">
                 Please fill in all fields to continue
               </p>

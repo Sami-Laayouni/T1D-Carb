@@ -98,6 +98,9 @@ IMPORTANT RULES:
 - For complex meals, sum up all components
 - Be realistic about portion sizes based on visual cues
 - If Gemini says "6 pancakes", calculate for 6 pancakes, not 1
+- BE REALISTIC WITH CARB ESTIMATES: 6 pancakes should be ~120-150g carbs total
+- Use reasonable serving sizes: 1 pancake ≈ 20-25g carbs, 1 tbsp syrup ≈ 13g carbs
+- For pancakes: 6 pancakes × 20-25g each = 120-150g carbs total
 ${
   detectedCount
     ? `- You MUST use exactly ${detectedCount} as the item count in your totals`

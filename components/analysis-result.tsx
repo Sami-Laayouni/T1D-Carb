@@ -24,6 +24,9 @@ import {
   Camera,
   Loader2,
   AlertTriangle,
+  Edit3,
+  Save,
+  X,
 } from "lucide-react";
 
 export interface FoodAnalysis {
@@ -35,6 +38,14 @@ export interface FoodAnalysis {
   clarificationQuestion?: string;
   notes?: string;
   enrichment?: boolean;
+  detectedFoods?: DetectedFood[];
+}
+
+export interface DetectedFood {
+  foodName: string;
+  quantity: string;
+  carbs: number;
+  confidence: number;
 }
 
 interface AnalysisResultProps {
@@ -44,6 +55,7 @@ interface AnalysisResultProps {
   bgTrend: string;
   totalDailyDose: string;
   bgUnit: "mg/dL" | "mmol/L";
+  correctionFactor: number;
   onClarificationResponse: (response: string) => void;
   onReset: () => void;
   isProcessing: boolean;
@@ -92,12 +104,19 @@ export function AnalysisResult({
   bgTrend,
   totalDailyDose,
   bgUnit: propBgUnit,
+  correctionFactor,
   onClarificationResponse,
   onReset,
   isProcessing,
 }: AnalysisResultProps) {
   const [clarificationInput, setClarificationInput] = useState<string>("");
   const [bgUnit, setBgUnit] = useState<"mg/dL" | "mmol/L">(propBgUnit);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [editedNotes, setEditedNotes] = useState(analysis.notes || "");
+  const [isEditingFood, setIsEditingFood] = useState(false);
+  const [editedFoodName, setEditedFoodName] = useState(analysis.foodName);
+  const [editedCarbs, setEditedCarbs] = useState(analysis.carbs.toString());
+  const [isFoodEdited, setIsFoodEdited] = useState(false);
 
   // Unit conversion functions
   const mgdLToMmolL = (mgdL: number): number => mgdL / 18.0182;
@@ -128,19 +147,32 @@ export function AnalysisResult({
   const ratio = Number(carbRatio) || 1;
   const baseInsulinDose: number = carbs / ratio;
 
-  // Adjust insulin dose based on current BG
+  // Calculate insulin correction dose using the formula: (BG - 7) ÷ correctionFactor
   const currentBGNum: number = parseFloat(currentBG) || 0;
-  let adjustedInsulinDose: number = baseInsulinDose;
+  let correctionDose: number = 0;
+  let totalInsulinDose: number = baseInsulinDose;
 
   if (!isNaN(currentBGNum)) {
+    // Convert BG to mmol/L if needed for correction calculation
+    const bgInMmolL =
+      bgUnit === "mg/dL" ? mgdLToMmolL(currentBGNum) : currentBGNum;
+
+    // Apply correction formula: (BG - 7) ÷ correctionFactor
+    if (bgInMmolL > 7) {
+      correctionDose = (bgInMmolL - 7) / correctionFactor;
+    }
+
+    // Add correction dose to base dose
+    totalInsulinDose = baseInsulinDose + correctionDose;
+
+    // Apply safety adjustments for very low BG
     if (currentBGNum < 80) {
-      adjustedInsulinDose = Math.max(0, baseInsulinDose - 1);
-    } else if (currentBGNum > 180) {
-      adjustedInsulinDose = baseInsulinDose + 1;
+      totalInsulinDose = Math.max(0, totalInsulinDose - 1);
     }
   }
 
-  const insulinDose: string = adjustedInsulinDose.toFixed(1);
+  const insulinDose: string = totalInsulinDose.toFixed(1);
+  const correctionDoseStr: string = correctionDose.toFixed(1);
 
   // Calculate ICR and ISF using 500/1500 rules
   const calculateICRandISF = (tdd: number): { ICR: number; ISF: number } => {
@@ -321,10 +353,48 @@ export function AnalysisResult({
     }
   };
 
+  const handleEditNotes = () => {
+    setIsEditingNotes(true);
+    setEditedNotes(analysis.notes || "");
+  };
+
+  const handleSaveNotes = () => {
+    // Update the analysis with edited notes
+    analysis.notes = editedNotes;
+    setIsEditingNotes(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedNotes(analysis.notes || "");
+    setIsEditingNotes(false);
+  };
+
+  const handleEditFood = () => {
+    setIsEditingFood(true);
+    setEditedFoodName(analysis.foodName);
+    setEditedCarbs(analysis.carbs.toString());
+  };
+
+  const handleSaveFood = () => {
+    const newCarbs = Number.parseFloat(editedCarbs);
+    if (editedFoodName.trim() && !isNaN(newCarbs) && newCarbs > 0) {
+      analysis.foodName = editedFoodName.trim();
+      analysis.carbs = newCarbs;
+      setIsFoodEdited(true);
+      setIsEditingFood(false);
+    }
+  };
+
+  const handleCancelFoodEdit = () => {
+    setEditedFoodName(analysis.foodName);
+    setEditedCarbs(analysis.carbs.toString());
+    setIsEditingFood(false);
+  };
+
   const predictions: BGPrediction | null = calculateBGPredictions(
     currentBG,
     carbs,
-    parseFloat(insulinDose),
+    totalInsulinDose,
     bgTrend,
     parseFloat(totalDailyDose)
   );
@@ -332,7 +402,7 @@ export function AnalysisResult({
   const cgmData: CGMDataPoint[] = generateCGMData(
     currentBG,
     carbs,
-    parseFloat(insulinDose),
+    totalInsulinDose,
     bgTrend,
     parseFloat(totalDailyDose)
   );
@@ -400,18 +470,17 @@ export function AnalysisResult({
 
   return (
     <div className="space-y-4 p-4">
-      <Card>
-        <CardContent className="pt-6">
-          <img
-            src={
-              analysis.imageUrl ||
-              "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400"
-            }
-            alt="Analyzed food"
-            className="w-full h-48 object-cover rounded-lg mb-4"
-          />
-        </CardContent>
-      </Card>
+      {analysis.imageUrl && (
+        <Card>
+          <CardContent className="pt-6">
+            <img
+              src={analysis.imageUrl}
+              alt="Analyzed food"
+              className="w-full h-48 object-cover rounded-lg mb-4"
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {analysis.needsClarification ? (
         <Card className="border-orange-500">
@@ -455,12 +524,95 @@ export function AnalysisResult({
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 <CheckCircle className="h-5 w-5 text-blue-500 mt-0.5" />
-                <div>
-                  <CardTitle className="text-lg">{analysis.foodName}</CardTitle>
-                  <CardDescription>
-                    Confidence:{" "}
-                    {Math.round((Number(analysis.confidence) || 0) * 100)}%
-                  </CardDescription>
+                <div className="flex-1">
+                  {isEditingFood ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Food Name
+                        </label>
+                        <Input
+                          value={editedFoodName}
+                          onChange={(e) => setEditedFoodName(e.target.value)}
+                          className="mt-1"
+                          placeholder="Enter food name"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Carbohydrates (grams)
+                        </label>
+                        <div className="relative mt-1">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0.1"
+                            value={editedCarbs}
+                            onChange={(e) => setEditedCarbs(e.target.value)}
+                            className="pr-12"
+                            placeholder="25"
+                          />
+                          <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-500">
+                            g
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={handleSaveFood}
+                          disabled={
+                            !editedFoodName.trim() ||
+                            isNaN(Number.parseFloat(editedCarbs)) ||
+                            Number.parseFloat(editedCarbs) <= 0
+                          }
+                        >
+                          <Save className="h-3 w-3 mr-1" />
+                          Save
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleCancelFoodEdit}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <CardTitle className="text-lg">
+                          {analysis.foodName}
+                        </CardTitle>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleEditFood}
+                          className="h-6 px-2 text-xs"
+                        >
+                          <Edit3 className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      </div>
+                      <CardDescription>
+                        {isFoodEdited ? (
+                          <span className="text-orange-600 dark:text-orange-400">
+                            ✏️ Manually edited
+                          </span>
+                        ) : (
+                          <>
+                            Confidence:{" "}
+                            {Math.round(
+                              (Number(analysis.confidence) || 0) * 100
+                            )}
+                            %
+                          </>
+                        )}
+                      </CardDescription>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -468,9 +620,16 @@ export function AnalysisResult({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Estimated Carbs
-                </p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {isFoodEdited ? "Carbs" : "Estimated Carbs"}
+                  </p>
+                  {isFoodEdited && (
+                    <span className="text-xs text-orange-600 dark:text-orange-400">
+                      ✏️ Edited
+                    </span>
+                  )}
+                </div>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">
                   {carbs}g
                 </p>
@@ -488,26 +647,42 @@ export function AnalysisResult({
             {!isNaN(currentBGNum) && (
               <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  Insulin Adjustment
+                  Insulin Dose Breakdown
                 </p>
-                <p className="text-sm">
-                  Base dose: {baseInsulinDose.toFixed(1)}u
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Base dose (carbs):</span>
+                    <span className="font-medium">
+                      {baseInsulinDose.toFixed(1)}u
+                    </span>
+                  </div>
+                  {correctionDose > 0 && (
+                    <div className="flex justify-between">
+                      <span>Correction dose (BG):</span>
+                      <span className="font-medium text-orange-600">
+                        +{correctionDoseStr}u
+                      </span>
+                    </div>
+                  )}
                   {currentBGNum < 80 && (
-                    <span className="text-red-600 ml-2">
-                      - 1u (low BG) = {insulinDose}u
-                    </span>
+                    <div className="flex justify-between">
+                      <span>Safety adjustment (low BG):</span>
+                      <span className="font-medium text-red-600">-1.0u</span>
+                    </div>
                   )}
-                  {currentBGNum > 180 && (
-                    <span className="text-orange-600 ml-2">
-                      + 1u (high BG) = {insulinDose}u
-                    </span>
-                  )}
-                  {currentBGNum >= 80 && currentBGNum <= 180 && (
-                    <span className="text-green-600 ml-2">
-                      (normal BG - no adjustment)
-                    </span>
-                  )}
-                </p>
+                  <div className="flex justify-between border-t pt-2 font-bold text-lg">
+                    <span>Total dose:</span>
+                    <span className="text-blue-600">{insulinDose}u</span>
+                  </div>
+                </div>
+                {correctionDose > 0 && (
+                  <div className="mt-3 p-2 bg-orange-50 dark:bg-orange-950/20 rounded border border-orange-200 dark:border-orange-800">
+                    <p className="text-xs text-orange-700 dark:text-orange-300">
+                      <strong>Correction Formula:</strong> (BG - 7) ÷{" "}
+                      {correctionFactor} = {correctionDoseStr}u
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -530,14 +705,93 @@ export function AnalysisResult({
               </div>
             </div>
 
-            {analysis.notes && (
-              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Notes
-                </p>
-                <p className="text-sm">{analysis.notes}</p>
+            {analysis.detectedFoods && analysis.detectedFoods.length > 1 && (
+              <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    Detected Food Items
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {analysis.detectedFoods.map((food, index) => (
+                    <div
+                      key={index}
+                      className="flex justify-between items-center text-sm"
+                    >
+                      <span className="text-blue-700 dark:text-blue-300">
+                        {food.foodName} ({food.quantity})
+                      </span>
+                      <span className="font-medium text-blue-600 dark:text-blue-400">
+                        {food.carbs}g carbs
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
+
+            <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  {analysis.notes ? "AI-Generated Notes" : "Personal Notes"}
+                </p>
+                {!isEditingNotes && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleEditNotes}
+                    className="h-8 px-2 text-xs"
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    {analysis.notes ? "Edit" : "Add Notes"}
+                  </Button>
+                )}
+              </div>
+
+              {isEditingNotes ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={editedNotes}
+                    onChange={(e) => setEditedNotes(e.target.value)}
+                    className="w-full p-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    rows={3}
+                    placeholder="Add your notes here..."
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveNotes}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <Save className="h-3 w-3 mr-1" />
+                      Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      className="h-8 px-3 text-xs"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  {analysis.notes ? (
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                      {analysis.notes}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      No notes added yet. Click "Add Notes" to add personal
+                      comments about this meal.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {currentBG &&
               bgTrend &&

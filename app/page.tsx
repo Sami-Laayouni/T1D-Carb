@@ -11,6 +11,7 @@ export default function Home() {
     bgTrend: string;
     totalDailyDose: string;
     bgUnit: "mg/dL" | "mmol/L";
+    correctionFactor: number;
   } | null>(null);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export default function Home() {
     bgTrend: string;
     totalDailyDose: string;
     bgUnit: "mg/dL" | "mmol/L";
+    correctionFactor: number;
   }) => {
     localStorage.setItem("profileData", JSON.stringify(data));
     setProfileData(data);
@@ -54,6 +56,7 @@ export default function Home() {
               bgTrend={profileData.bgTrend}
               totalDailyDose={profileData.totalDailyDose}
               bgUnit={profileData.bgUnit}
+              correctionFactor={profileData.correctionFactor}
               onUpdateProfile={handleProfileSave}
             />
           </div>
